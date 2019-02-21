@@ -1,0 +1,6 @@
+digraph {
+  graph [rankdir=LR];
+  START [shape=plaintext];
+  START -> q_0;
+  q_0 [shape=circle, label="0"];
+}
