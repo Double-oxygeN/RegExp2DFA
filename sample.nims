@@ -3,6 +3,7 @@ let examples = {
   "singleton": "a",
   "sample": "(a|b)*abb",
   "question": "a?b?c?d?e?f?g",
+  "charset1": "[\\+-]?([0123456789]|[123456789][0123456789]+)",
   "google": "go+gle"
 }
 

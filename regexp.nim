@@ -41,6 +41,8 @@ type
     rtokOption = "?",
     rtokLeftParen = "(",
     rtokRightParen = ")",
+    rtokLeftSquareBracket = "[",
+    rtokRightSquareBracket = "]",
     rtokChar = "char"
 
   RegExpToken = ref object
@@ -191,6 +193,8 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
       of '?': result.addLast(RegExpToken(kind: rtokOption))
       of '(': result.addLast(RegExpToken(kind: rtokLeftParen))
       of ')': result.addLast(RegExpToken(kind: rtokRightParen))
+      of '[': result.addLast(RegExpToken(kind: rtokLeftSquareBracket))
+      of ']': result.addLast(RegExpToken(kind: rtokRightSquareBracket))
       of '\\': state = StateLexRegExp(1)
       else: result.addLast(RegExpToken(kind: rtokChar, c: input[reading]))
 
@@ -201,7 +205,7 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
         result.addLast(RegExpToken(kind: rtokChar, c: '\\'))
         break
       case input[reading]
-      of '|', '*', '+', '?', '(', ')', '\\':
+      of '|', '*', '+', '?', '(', ')', '[', ']', '\\':
         result.addLast(RegExpToken(kind: rtokChar, c: input[reading]))
       else:
         result.addLast(RegExpToken(kind: rtokChar, c: '\\'))
@@ -209,6 +213,30 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
 
       inc reading
       state = StateLexRegExp(0)
+
+proc parseCharSetExp(tokens: var Deque[RegExpToken]): RegExp[char] =
+  if tokens.len == 0:
+    raise RegExpParseException.newException("CharSetExp should have at least one character.")
+  
+  let firstToken = tokens.popFirst()
+  case firstToken.kind
+  of rtokChar:
+    result = regc(firstToken.c)
+
+    while true:
+      case tokens.peekFirst().kind
+      of rtokChar:
+        let anotherToken = tokens.popFirst()
+        result = result |@ regc(anotherToken.c)
+
+      of rtokRightSquareBracket:
+        break
+
+      else:
+        raise RegExpParseException.newException("Invalid CharSetExp: single character is only supported.")
+
+  else:
+    raise RegExpParseException.newException("Invalid CharSetExp: single character is only supported.")
 
 proc parseAltExp(tokens: var Deque[RegExpToken]): RegExp[char]
 
@@ -228,6 +256,14 @@ proc parseAtomExp(tokens: var Deque[RegExpToken]): RegExp[char] =
       raise RegExpParseException.newException("Invalid AtomExp: unexpected end-of-text.")
     if tokens.popFirst().kind != rtokRightParen:
       raise RegExpParseException.newException("Invalid AtomExp: expect ')'.")
+
+  of rtokLeftSquareBracket:
+    result = parseCharSetExp(tokens)
+
+    if tokens.len == 0:
+      raise RegExpParseException.newException("Invalid AtomExp: unexpected end-of-text.")
+    if tokens.popFirst().kind != rtokRightSquareBracket:
+      raise RegExpParseException.newException("Invalid AtomExp: expect ']'.")
 
   else:
     raise RegExpParseException.newException("Invalid AtomExp: expect non-meta character, escaped character or '('.")
@@ -264,7 +300,7 @@ proc parseConcatExp0(tokens: var Deque[RegExpToken]; prevExp: RegExp[char]): Reg
 
   let firstToken = tokens.peekFirst()
   case firstToken.kind
-  of rtokChar, rtokLeftParen:
+  of rtokChar, rtokLeftParen, rtokLeftSquareBracket:
     let unaryExp = parseUnaryExp(tokens)
     result = prevExp &@ parseConcatExp0(tokens, unaryExp)
 
@@ -277,7 +313,7 @@ proc parseConcatExp(tokens: var Deque[RegExpToken]): RegExp[char] =
 
   let firstToken = tokens.peekFirst()
   case firstToken.kind
-  of rtokChar, rtokLeftParen:
+  of rtokChar, rtokLeftParen, rtokLeftSquareBracket:
     let unaryExp = parseUnaryExp(tokens)
     result = parseConcatExp0(tokens, unaryExp)
 
@@ -304,7 +340,7 @@ proc parseAltExp(tokens: var Deque[RegExpToken]): RegExp[char] =
 
   let firstToken = tokens.peekFirst()
   case firstToken.kind
-  of rtokChar, rtokLeftParen:
+  of rtokChar, rtokLeftParen, rtokLeftSquareBracket:
     let concatExp = parseConcatExp(tokens)
     result = parseAltExp0(tokens, concatExp)
 
