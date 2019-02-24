@@ -1,15 +1,15 @@
 digraph {
   graph [rankdir=LR];
 
-  START [shape=plaintext];
-
-  START -> q_0;
   q_0 [shape=circle, label="0"];
   q_1 [shape=circle, label="1"];
   q_2 [shape=circle, label="2"];
   q_3 [shape=circle, label="3"];
   q_4 [shape=circle, label="4"];
   q_5 [shape=doublecircle, label="5"];
+  START [shape=plaintext];
+
+  START -> q_0;
   q_1 -> q_2 [label="o"];
   q_2 -> q_2 [label="o"];
   q_4 -> q_5 [label="e"];

@@ -1,10 +1,10 @@
 digraph {
   graph [rankdir=LR];
 
+  q_0 [shape=circle, label="0"];
+  q_1 [shape=doublecircle, label="1"];
   START [shape=plaintext];
 
   START -> q_0;
-  q_0 [shape=circle, label="0"];
-  q_1 [shape=doublecircle, label="1"];
   q_0 -> q_1 [label="a"];
 }

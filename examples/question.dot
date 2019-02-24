@@ -1,9 +1,6 @@
 digraph {
   graph [rankdir=LR];
 
-  START [shape=plaintext];
-
-  START -> q_0;
   q_0 [shape=circle, label="0"];
   q_1 [shape=circle, label="1"];
   q_2 [shape=circle, label="2"];
@@ -13,6 +10,9 @@ digraph {
   q_6 [shape=circle, label="6"];
   q_7 [shape=circle, label="7"];
   q_8 [shape=doublecircle, label="8"];
+  START [shape=plaintext];
+
+  START -> q_0;
   q_6 -> q_5 [label="r"];
   q_7 -> q_8 [label="A"];
   q_7 -> q_8 [label="C"];

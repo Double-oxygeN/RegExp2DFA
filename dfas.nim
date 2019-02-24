@@ -35,14 +35,14 @@ proc dotFormat*[Q, A](self: Dfa[Q, A]): string =
 
   r.add "  graph [rankdir=LR];\p\p"
 
-  r.add &"  START [shape=plaintext];\p\p  START -> q_{self.initState};\p"
-
   for q in self.allStates:
     r.add &"  q_{q} "
     if q in self.endStates:
       r.add &"[shape=doublecircle, label=\"{q}\"];\p"
     else:
       r.add &"[shape=circle, label=\"{q}\"];\p"
+
+  r.add &"  START [shape=plaintext];\p\p  START -> q_{self.initState};\p"
 
   for before, after in self.transitionTable:
     r.add &"  q_{before.q} -> q_{after} [label=\"{before.a}\"];\p"
