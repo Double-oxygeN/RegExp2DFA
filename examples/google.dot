@@ -1,6 +1,8 @@
 digraph {
   graph [rankdir=LR];
+
   START [shape=plaintext];
+
   START -> q_0;
   q_0 [shape=circle, label="0"];
   q_1 [shape=circle, label="1"];

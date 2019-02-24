@@ -114,6 +114,11 @@ proc pretty*[C](r: RegExp[C]; indentCount: int = 0): string =
 
 proc `$`*[C](self: RegExp[C]): string = self.pretty(0)
 
+proc accept[C](self: RegExp[C]; c: C): bool =
+  case self.kind
+  of regChar: self.c == c
+  else: false
+
 proc calcPositions*[C](self: RegExp[C]; pos: seq[RegExp[C]] = @[]): seq[RegExp[C]] =
   case self.kind
   of regEpsilon:
@@ -368,8 +373,8 @@ proc toDfa*[C](self: RegExp[C]): Dfa[uint16, C] =
     transitions: seq[tuple[before: tuple[q: uint16, a: C], after: uint16]] = @[]
     endStateIds: set[uint16] = {}
 
-  stateTranslater[self.firstPos] = 0'u16
-  unmarkedStates.addLast(self.firstPos)
+  stateTranslater[extendedExp.firstPos] = 0'u16
+  unmarkedStates.addLast(extendedExp.firstPos)
 
   while unmarkedStates.len > 0:
     let
@@ -380,7 +385,7 @@ proc toDfa*[C](self: RegExp[C]): Dfa[uint16, C] =
       let
         nextStateSeq = toSeq(state.items)
           .map(proc (p: Position): RegExp[C] = pos[p])
-          .filter(proc (p: RegExp[C]): bool = p.c == a)
+          .filter(proc (p: RegExp[C]): bool = p.accept(a))
           .map(proc (p: RegExp[C]): set[Position] = p.followPos)
 
       if nextStateSeq.len > 0:
@@ -394,10 +399,8 @@ proc toDfa*[C](self: RegExp[C]): Dfa[uint16, C] =
           nextStateId = stateTranslater.mgetOrPut(nextState, stateTranslater.len.uint16)
         transitions.add ((stateId, a), nextStateId)
 
-  stderr.writeLine $pos, " ", stateTranslater
-
-  for state, stateId in stateTranslater:
-    if pos.high.Position in state: endStateIds.incl(stateId)
+  for state, stateId in stateTranslater.pairs:
+    if Position(pos.high) in state: endStateIds.incl(stateId)
 
   result = newDfa(self.alphabets, transitions, 0'u16, endStateIds)
 

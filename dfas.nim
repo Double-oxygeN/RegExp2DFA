@@ -23,19 +23,21 @@ proc testInput*[Q, A](self: Dfa[Q, A]; input: openarray[A]): bool =
 
   result = state in self.endStates
 
+proc allStates*[Q, A](self: Dfa[Q, A]): set[Q] =
+  ## Gather all states used in the automaton.
+  result = {self.initState}
+  for before, afterQ in self.transitionTable.pairs:
+    result.incl({before.q, afterQ})
+
 proc dotFormat*[Q, A](self: Dfa[Q, A]): string =
   ## Format the automaton in DOT language.
   var r = rope("digraph {\p")
 
-  r.add "  graph [rankdir=LR];\p"
+  r.add "  graph [rankdir=LR];\p\p"
 
-  var allStates: set[Q] = {self.initState}
-  for before, afterQ in self.transitionTable.pairs:
-    allStates.incl({before.q, afterQ})
+  r.add &"  START [shape=plaintext];\p\p  START -> q_{self.initState};\p"
 
-  r.add &"  START [shape=plaintext];\p  START -> q_{self.initState};\p"
-
-  for q in allStates:
+  for q in self.allStates:
     r.add &"  q_{q} "
     if q in self.endStates:
       r.add &"[shape=doublecircle, label=\"{q}\"];\p"
