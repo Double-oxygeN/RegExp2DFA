@@ -11,11 +11,12 @@ type
     regAlt,
     regStar,
     regPlus,
-    regOption
+    regOption,
+    regAnyChar
 
   RegExp[C] = ref object
     case kind: RegExpKind
-    of regChar:
+    of regChar, regAnyChar:
       c: C
       pos: Position
       followPos: set[Position]
@@ -43,6 +44,7 @@ type
     rtokRightParen = ")",
     rtokLeftSquareBracket = "[",
     rtokRightSquareBracket = "]",
+    rtokDot = ".",
     rtokChar = "char"
 
   RegExpToken = ref object
@@ -73,13 +75,16 @@ proc regs*(str: string): RegExp[char] =
 
 proc star*[C](r: RegExp[C]): RegExp[C] =
   ## Kleene closure
-  RegExp[char](kind: regStar, r: r, alphabets: r.alphabets)
+  RegExp[C](kind: regStar, r: r, alphabets: r.alphabets)
 
 proc plus*[C](r: RegExp[C]): RegExp[C] =
-  RegExp[char](kind: regPlus, r: r, alphabets: r.alphabets)
+  RegExp[C](kind: regPlus, r: r, alphabets: r.alphabets)
 
 proc option*[C](r: RegExp[C]): RegExp[C] =
-  RegExp[char](kind: regOption, r: r, alphabets: r.alphabets)
+  RegExp[C](kind: regOption, r: r, alphabets: r.alphabets)
+
+proc anyChar*(C: typedesc): RegExp[C] =
+  RegExp[C](kind: regAnyChar, alphabets: {succ(C.low)..C.high})
 
 proc pretty*[C](r: RegExp[C]; indentCount: int = 0): string =
   ## Convert to string
@@ -112,11 +117,15 @@ proc pretty*[C](r: RegExp[C]; indentCount: int = 0): string =
     result = fmt"Option ({r.nullable};{r.firstPos};{r.lastPos};-)".indent(indentCount)
     result &= "\p" & r.r.pretty(indentCount + 2)
 
+  of regAnyChar:
+    result = fmt"AnyChar[{r.pos}] ({r.nullable};{r.firstPos};{r.lastPos};{r.followPos})"
+
 proc `$`*[C](self: RegExp[C]): string = self.pretty(0)
 
 proc accept[C](self: RegExp[C]; c: C): bool =
   case self.kind
   of regChar: self.c == c
+  of regAnyChar: true
   else: false
 
 proc calcPositions*[C](self: RegExp[C]; pos: seq[RegExp[C]] = @[]): seq[RegExp[C]] =
@@ -127,7 +136,7 @@ proc calcPositions*[C](self: RegExp[C]; pos: seq[RegExp[C]] = @[]): seq[RegExp[C
     self.firstPos = {}
     self.lastPos = {}
 
-  of regChar:
+  of regChar, regAnyChar:
     self.pos = Position(pos.len)
     self.nullable = false
     self.firstPos = {self.pos}
@@ -200,6 +209,7 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
       of ')': result.addLast(RegExpToken(kind: rtokRightParen))
       of '[': result.addLast(RegExpToken(kind: rtokLeftSquareBracket))
       of ']': result.addLast(RegExpToken(kind: rtokRightSquareBracket))
+      of '.': result.addLast(RegExpToken(kind: rtokDot))
       of '\\': state = StateLexRegExp(1)
       else: result.addLast(RegExpToken(kind: rtokChar, c: input[reading]))
 
@@ -210,7 +220,7 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
         result.addLast(RegExpToken(kind: rtokChar, c: '\\'))
         break
       case input[reading]
-      of '|', '*', '+', '?', '(', ')', '[', ']', '\\':
+      of '|', '*', '+', '?', '(', ')', '[', ']', '.', '\\':
         result.addLast(RegExpToken(kind: rtokChar, c: input[reading]))
       else:
         result.addLast(RegExpToken(kind: rtokChar, c: '\\'))
@@ -253,6 +263,9 @@ proc parseAtomExp(tokens: var Deque[RegExpToken]): RegExp[char] =
   case firstToken.kind
   of rtokChar:
     result = regc(firstToken.c)
+
+  of rtokDot:
+    result = anyChar(char)
 
   of rtokLeftParen:
     result = parseAltExp(tokens)
@@ -305,7 +318,7 @@ proc parseConcatExp0(tokens: var Deque[RegExpToken]; prevExp: RegExp[char]): Reg
 
   let firstToken = tokens.peekFirst()
   case firstToken.kind
-  of rtokChar, rtokLeftParen, rtokLeftSquareBracket:
+  of rtokChar, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
     let unaryExp = parseUnaryExp(tokens)
     result = prevExp &@ parseConcatExp0(tokens, unaryExp)
 
@@ -318,7 +331,7 @@ proc parseConcatExp(tokens: var Deque[RegExpToken]): RegExp[char] =
 
   let firstToken = tokens.peekFirst()
   case firstToken.kind
-  of rtokChar, rtokLeftParen, rtokLeftSquareBracket:
+  of rtokChar, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
     let unaryExp = parseUnaryExp(tokens)
     result = parseConcatExp0(tokens, unaryExp)
 
@@ -345,7 +358,7 @@ proc parseAltExp(tokens: var Deque[RegExpToken]): RegExp[char] =
 
   let firstToken = tokens.peekFirst()
   case firstToken.kind
-  of rtokChar, rtokLeftParen, rtokLeftSquareBracket:
+  of rtokChar, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
     let concatExp = parseConcatExp(tokens)
     result = parseAltExp0(tokens, concatExp)
 

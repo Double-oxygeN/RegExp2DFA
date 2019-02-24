@@ -201,3 +201,19 @@ suite "RegExp":
       not dfaSimpleCS.testInput("01")
       not dfaSimpleCS.testInput("00")
       not dfaSimpleCS.testInput("+-0")
+
+  test "any character":
+    let
+      rAnyChar = reg"a...e"
+      dfaAnyChar = rAnyChar.toDfa()
+
+    check:
+      dfaAnyChar.testInput("azure")
+      dfaAnyChar.testInput("angle")
+      dfaAnyChar.testInput("above")
+      dfaAnyChar.testInput("apple")
+      dfaAnyChar.testInput("a pie")
+      dfaAnyChar.testInput("a012e")
+      dfaAnyChar.testInput("a+$\"e")
+      dfaAnyChar.testInput("a\t\a\ne")
+      dfaAnyChar.testInput("a\0\r\x01e")
