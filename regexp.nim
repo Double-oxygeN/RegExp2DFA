@@ -12,12 +12,14 @@ type
     regStar,
     regPlus,
     regOption,
-    regAnyChar
+    regAnyChar,
+    regCharSet
 
   RegExp[C] = ref object
     case kind: RegExpKind
-    of regChar, regAnyChar:
+    of regChar, regAnyChar, regCharSet:
       c: C
+      cs: set[C]
       pos: Position
       followPos: set[Position]
 
@@ -44,6 +46,7 @@ type
     rtokRightParen = ")",
     rtokLeftSquareBracket = "[",
     rtokRightSquareBracket = "]",
+    rtokHyphen = "-",
     rtokDot = ".",
     rtokChar = "char"
 
@@ -86,6 +89,9 @@ proc option*[C](r: RegExp[C]): RegExp[C] =
 proc anyChar*(C: typedesc): RegExp[C] =
   RegExp[C](kind: regAnyChar, alphabets: {succ(C.low)..C.high})
 
+proc charSet*[C](cs: set[C]): RegExp[C] =
+  RegExp[C](kind: regCharSet, cs: cs, alphabets: cs)
+
 proc pretty*[C](r: RegExp[C]; indentCount: int = 0): string =
   ## Convert to string
   case r.kind
@@ -118,7 +124,10 @@ proc pretty*[C](r: RegExp[C]; indentCount: int = 0): string =
     result &= "\p" & r.r.pretty(indentCount + 2)
 
   of regAnyChar:
-    result = fmt"AnyChar[{r.pos}] ({r.nullable};{r.firstPos};{r.lastPos};{r.followPos})"
+    result = fmt"AnyChar[{r.pos}] ({r.nullable};{r.firstPos};{r.lastPos};{r.followPos})".indent(indentCount)
+
+  of regCharSet:
+    result = fmt"CharSet[{r.pos}] = {r.cs} ({r.nullable};{r.firstPos};{r.lastPos};{r.followPos})".indent(indentCount)
 
 proc `$`*[C](self: RegExp[C]): string = self.pretty(0)
 
@@ -126,6 +135,7 @@ proc accept[C](self: RegExp[C]; c: C): bool =
   case self.kind
   of regChar: self.c == c
   of regAnyChar: true
+  of regCharSet: c in self.cs
   else: false
 
 proc calcPositions*[C](self: RegExp[C]; pos: seq[RegExp[C]] = @[]): seq[RegExp[C]] =
@@ -136,7 +146,7 @@ proc calcPositions*[C](self: RegExp[C]; pos: seq[RegExp[C]] = @[]): seq[RegExp[C
     self.firstPos = {}
     self.lastPos = {}
 
-  of regChar, regAnyChar:
+  of regChar, regAnyChar, regCharSet:
     self.pos = Position(pos.len)
     self.nullable = false
     self.firstPos = {self.pos}
@@ -209,6 +219,7 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
       of ')': result.addLast(RegExpToken(kind: rtokRightParen))
       of '[': result.addLast(RegExpToken(kind: rtokLeftSquareBracket))
       of ']': result.addLast(RegExpToken(kind: rtokRightSquareBracket))
+      of '-': result.addLast(RegExpToken(kind: rtokHyphen))
       of '.': result.addLast(RegExpToken(kind: rtokDot))
       of '\\': state = StateLexRegExp(1)
       else: result.addLast(RegExpToken(kind: rtokChar, c: input[reading]))
@@ -229,29 +240,78 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
       inc reading
       state = StateLexRegExp(0)
 
-proc parseCharSetExp(tokens: var Deque[RegExpToken]): RegExp[char] =
+proc parseCharSetContent(tokens: var Deque[RegExpToken]; cs: set[char] = {}): set[char] =
   if tokens.len == 0:
-    raise RegExpParseException.newException("CharSetExp should have at least one character.")
-  
-  let firstToken = tokens.popFirst()
-  case firstToken.kind
-  of rtokChar:
-    result = regc(firstToken.c)
+    raise RegExpParseException.newException("Invalid CharSetContent: unexpected end-of-text")
 
-    while true:
+  case tokens.peekFirst().kind
+  of rtokChar:
+    let c1 = tokens.popFirst().c
+
+    if tokens.len == 0:
+      raise RegExpParseException.newException("Invalid CharSetContent: unexpected end-of-text")
+
+    case tokens.peekFirst().kind
+    of rtokHyphen:
+      discard tokens.popFirst()
+
+      if tokens.len == 0:
+        raise RegExpParseException.newException("Invalid CharSetContent: unexpected end-of-text")
+
       case tokens.peekFirst().kind
       of rtokChar:
-        let anotherToken = tokens.popFirst()
-        result = result |@ regc(anotherToken.c)
+        let c2 = tokens.popFirst().c
+        
+        result = parseCharSetContent(tokens, cs + {c1..c2})
+
+      of rtokHyphen:
+        discard tokens.popFirst()
+
+        result = parseCharSetContent(tokens, cs + {c1..'-'})
 
       of rtokRightSquareBracket:
-        break
+        result = cs + {c1, '-'}
 
       else:
-        raise RegExpParseException.newException("Invalid CharSetExp: single character is only supported.")
+        raise RegExpParseException.newException("Invalid CharSetContent: found unexpected token.")
+
+    of rtokChar, rtokRightSquareBracket:
+      result = parseCharSetContent(tokens, cs + {c1})
+
+    else:
+      raise RegExpParseException.newException("Invalid CharSetContent: found unexpected token.")
+
+  of rtokHyphen:
+    discard tokens.popFirst()
+
+    result = parseCharSetContent(tokens, cs + {'-'})
+
+  of rtokRightSquareBracket:
+    result = cs
 
   else:
-    raise RegExpParseException.newException("Invalid CharSetExp: single character is only supported.")
+    raise RegExpParseException.newException("Invalid CharSetContent: found unexpected token.")
+
+proc parseCharSetExp(tokens: var Deque[RegExpToken]): RegExp[char] =
+  if tokens.len < 2:
+    raise RegExpParseException.newException("CharSetExp should have at least two tokens.")
+  
+  if tokens.popFirst().kind != rtokLeftSquareBracket:
+    raise RegExpParseException.newException("Invalid CharSetExp: expect '['.")
+
+  case tokens.peekFirst().kind
+  of rtokChar, rtokHyphen, rtokRightSquareBracket:
+    let cs = parseCharSetContent(tokens)
+
+    result = charSet(cs)
+
+    if tokens.len == 0:
+      raise RegExpParseException.newException("Invalid CharSetExp: unexpected end-of-text.")
+    if tokens.popFirst().kind != rtokRightSquareBracket:
+      raise RegExpParseException.newException("Invalid CharSetExp: expected ']'.")
+
+  else:
+    raise RegExpParseException.newException("Invalid CharSetExp: expect character.")
 
 proc parseAltExp(tokens: var Deque[RegExpToken]): RegExp[char]
 
@@ -259,15 +319,21 @@ proc parseAtomExp(tokens: var Deque[RegExpToken]): RegExp[char] =
   if tokens.len == 0:
     raise RegExpParseException.newException("AtomExp should have at least one token.")
 
-  let firstToken = tokens.popFirst()
-  case firstToken.kind
+  case tokens.peekFirst().kind
   of rtokChar:
+    let firstToken = tokens.popFirst()
     result = regc(firstToken.c)
 
+  of rtokHyphen:
+    discard tokens.popFirst()
+    result = regc('-')
+
   of rtokDot:
+    discard tokens.popFirst()
     result = anyChar(char)
 
   of rtokLeftParen:
+    discard tokens.popFirst()
     result = parseAltExp(tokens)
     
     if tokens.len == 0:
@@ -277,11 +343,6 @@ proc parseAtomExp(tokens: var Deque[RegExpToken]): RegExp[char] =
 
   of rtokLeftSquareBracket:
     result = parseCharSetExp(tokens)
-
-    if tokens.len == 0:
-      raise RegExpParseException.newException("Invalid AtomExp: unexpected end-of-text.")
-    if tokens.popFirst().kind != rtokRightSquareBracket:
-      raise RegExpParseException.newException("Invalid AtomExp: expect ']'.")
 
   else:
     raise RegExpParseException.newException("Invalid AtomExp: expect non-meta character, escaped character or '('.")
@@ -295,8 +356,7 @@ proc parseUnaryExp(tokens: var Deque[RegExpToken]): RegExp[char] =
   if tokens.len == 0:
     return atomExp
 
-  let secondToken = tokens.peekFirst()
-  case secondToken.kind
+  case tokens.peekFirst().kind
   of rtokStar:
     tokens.popFirst()
     result = star(atomExp)
@@ -316,9 +376,8 @@ proc parseConcatExp0(tokens: var Deque[RegExpToken]; prevExp: RegExp[char]): Reg
   if tokens.len == 0:
     return prevExp
 
-  let firstToken = tokens.peekFirst()
-  case firstToken.kind
-  of rtokChar, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
+  case tokens.peekFirst().kind
+  of rtokChar, rtokHyphen, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
     let unaryExp = parseUnaryExp(tokens)
     result = prevExp &@ parseConcatExp0(tokens, unaryExp)
 
@@ -329,9 +388,8 @@ proc parseConcatExp(tokens: var Deque[RegExpToken]): RegExp[char] =
   if tokens.len == 0:
     raise RegExpParseException.newException("ConcatExp should have at lease one token.")
 
-  let firstToken = tokens.peekFirst()
-  case firstToken.kind
-  of rtokChar, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
+  case tokens.peekFirst().kind
+  of rtokChar, rtokHyphen, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
     let unaryExp = parseUnaryExp(tokens)
     result = parseConcatExp0(tokens, unaryExp)
 
@@ -342,8 +400,7 @@ proc parseAltExp0(tokens: var Deque[RegExpToken]; prevExp: RegExp[char]): RegExp
   if tokens.len == 0:
     return prevExp
 
-  let firstToken = tokens.peekFirst()
-  case firstToken.kind
+  case tokens.peekFirst().kind
   of rtokAlt:
     tokens.popFirst()
     let concatExp = parseConcatExp(tokens)
@@ -356,9 +413,8 @@ proc parseAltExp(tokens: var Deque[RegExpToken]): RegExp[char] =
   if tokens.len == 0:
     raise RegExpParseException.newException("AltExp should have at least one token.")
 
-  let firstToken = tokens.peekFirst()
-  case firstToken.kind
-  of rtokChar, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
+  case tokens.peekFirst().kind
+  of rtokChar, rtokHyphen, rtokDot, rtokLeftParen, rtokLeftSquareBracket:
     let concatExp = parseConcatExp(tokens)
     result = parseAltExp0(tokens, concatExp)
 

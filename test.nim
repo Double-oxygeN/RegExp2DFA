@@ -216,4 +216,22 @@ suite "RegExp":
       dfaAnyChar.testInput("a012e")
       dfaAnyChar.testInput("a+$\"e")
       dfaAnyChar.testInput("a\t\a\ne")
-      dfaAnyChar.testInput("a\0\r\x01e")
+      dfaAnyChar.testInput("a\\\r\x01e")
+
+  test "range charset":
+    let
+      rRangeCS = reg"[A-Z][A-Za-z_]*-[1-9][0-9-]*"
+      dfaRangeCS = rRangeCS.toDfa()
+
+    check:
+      dfaRangeCS.testInput("A-1")
+      dfaRangeCS.testInput("Z_-9")
+      dfaRangeCS.testInput("STU-3724")
+      dfaRangeCS.testInput("World-907")
+      dfaRangeCS.testInput("Freiheit-6-321")
+      dfaRangeCS.testInput("Double_oxygeN-2019-")
+
+      not dfaRangeCS.testInput("a-1")
+      not dfaRangeCS.testInput("4-4")
+      not dfaRangeCS.testInput("Opqr-0")
+      not dfaRangeCS.testInput("XYZ-1?")
