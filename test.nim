@@ -235,3 +235,19 @@ suite "RegExp":
       not dfaRangeCS.testInput("4-4")
       not dfaRangeCS.testInput("Opqr-0")
       not dfaRangeCS.testInput("XYZ-1?")
+
+  test "negative charset":
+    let
+      rNegCS = reg"[^0-9A-Za-z_-]+"
+      dfaNegCS = rNegCS.toDfa()
+
+    check:
+      dfaNegCS.testInput("~!\"+?\\/]@#%")
+      dfaNegCS.testInput("\t= (*:;.,')\r\n")
+
+      not dfaNegCS.testInput("")
+      not dfaNegCS.testInput("0")
+      not dfaNegCS.testInput("$_$")
+      not dfaNegCS.testInput("+-")
+      not dfaNegCS.testInput("@R")
+      not dfaNegCS.testInput("{go}")
