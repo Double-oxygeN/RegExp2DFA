@@ -1,5 +1,5 @@
 import sequtils, strformat, deques, tables
-from strutils import indent
+from strutils import indent, parseHexStr, HexDigits
 import dfas
 
 type
@@ -222,6 +222,22 @@ proc lexRegExp(input: string): Deque[RegExpToken] =
       case input[reading]
       of '|', '*', '+', '?', '(', ')', '[', ']', '.', '\\':
         result.addLast(RegExpToken(kind: rtokChar, c: input[reading]))
+      of '0': result.addLast(RegExpToken(kind: rtokChar, c: '\0'))
+      of 'a': result.addLast(RegExpToken(kind: rtokChar, c: '\a'))
+      of 'b': result.addLast(RegExpToken(kind: rtokChar, c: '\b'))
+      of 't': result.addLast(RegExpToken(kind: rtokChar, c: '\t'))
+      of 'n': result.addLast(RegExpToken(kind: rtokChar, c: '\n'))
+      of 'v': result.addLast(RegExpToken(kind: rtokChar, c: '\v'))
+      of 'f': result.addLast(RegExpToken(kind: rtokChar, c: '\f'))
+      of 'e': result.addLast(RegExpToken(kind: rtokChar, c: '\e'))
+      of 'x':
+        if reading + 2 > input.high or input[reading+1] notin HexDigits or input[reading+2] notin HexDigits:
+          result.addLast(RegExpToken(kind: rtokChar, c: '\\'))
+          result.addLast(RegExpToken(kind: rtokChar, c: 'x'))
+        else:
+          let hexChar = input[reading+1..reading+2].parseHexStr()[0]
+          result.addLast(RegExpToken(kind: rtokChar, c: hexChar))
+          inc reading, 2
       else:
         result.addLast(RegExpToken(kind: rtokChar, c: '\\'))
         result.addLast(RegExpToken(kind: rtokChar, c: input[reading]))

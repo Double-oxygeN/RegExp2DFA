@@ -216,4 +216,15 @@ suite "RegExp":
       dfaAnyChar.testInput("a012e")
       dfaAnyChar.testInput("a+$\"e")
       dfaAnyChar.testInput("a\t\a\ne")
-      dfaAnyChar.testInput("a\0\r\x01e")
+      dfaAnyChar.testInput("a\\\r\x01e")
+
+  test "escape characters":
+    let
+      rEscape = reg"[\|\*\+\?\(\)\[\]\.\\\a\b\t\n\v\f\e]+"
+      dfaEscape = rEscape.toDfa()
+
+    check:
+      dfaEscape.testInput("(+|*)")
+      dfaEscape.testInput("[?]")
+      dfaEscape.testInput("\\.")
+      dfaEscape.testInput("\a\b\e\f\n\t\v")
