@@ -262,3 +262,14 @@ suite "RegExp":
       not dfaNegCS.testInput("+-")
       not dfaNegCS.testInput("@R")
       not dfaNegCS.testInput("{go}")
+
+  test "UTF-8 Hiragana":
+    let
+      rHiragana = reg"(\xE3(\x81[\x81-\xBF]|\x82[\x80-\x94]))+"
+      dfaHiragana = rHiragana.toDfa()
+
+    check:
+      dfaHiragana.testInput("いろはにほへとちりぬるを")
+      dfaHiragana.testInput("わかよたれそつねならむ")
+      dfaHiragana.testInput("うゐのおくやまけふこえて")
+      dfaHiragana.testInput("あさきゆめみしゑひもせす")
