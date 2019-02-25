@@ -228,3 +228,37 @@ suite "RegExp":
       dfaEscape.testInput("[?]")
       dfaEscape.testInput("\\.")
       dfaEscape.testInput("\a\b\e\f\n\t\v")
+
+  test "range charset":
+    let
+      rRangeCS = reg"[A-Z][A-Za-z_]*-[1-9][0-9-]*"
+      dfaRangeCS = rRangeCS.toDfa()
+
+    check:
+      dfaRangeCS.testInput("A-1")
+      dfaRangeCS.testInput("Z_-9")
+      dfaRangeCS.testInput("STU-3724")
+      dfaRangeCS.testInput("World-907")
+      dfaRangeCS.testInput("Freiheit-6-321")
+      dfaRangeCS.testInput("Double_oxygeN-2019-")
+
+      not dfaRangeCS.testInput("a-1")
+      not dfaRangeCS.testInput("4-4")
+      not dfaRangeCS.testInput("Opqr-0")
+      not dfaRangeCS.testInput("XYZ-1?")
+
+  test "negative charset":
+    let
+      rNegCS = reg"[^0-9A-Za-z_-]+"
+      dfaNegCS = rNegCS.toDfa()
+
+    check:
+      dfaNegCS.testInput("~!\"+?\\/]@#%")
+      dfaNegCS.testInput("\t= (*:;.,')\r\n")
+
+      not dfaNegCS.testInput("")
+      not dfaNegCS.testInput("0")
+      not dfaNegCS.testInput("$_$")
+      not dfaNegCS.testInput("+-")
+      not dfaNegCS.testInput("@R")
+      not dfaNegCS.testInput("{go}")
